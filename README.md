@@ -1,7 +1,7 @@
 # opencode-gui-doctor
 
 [![npm](https://img.shields.io/npm/v/opencode-gui-doctor.svg)](https://www.npmjs.com/package/opencode-gui-doctor)
-[![license](https://img.shields.io/npm/l/opencode-gui-doctor.svg)](./package.json)
+[![license](https://img.shields.io/npm/l/opencode-gui-doctor.svg)](./LICENSE)
 [![docs](https://img.shields.io/badge/docs-github%20pages-blue)](https://smoothwind.github.io/opencode-gui-doctor/)
 [![node](https://img.shields.io/node/v/opencode-gui-doctor.svg)](https://nodejs.org)
 
@@ -222,4 +222,4 @@ attached to tool results as `application/zip`.
 
 ## License
 
-[MIT](./package.json)
+[MIT](./LICENSE)
