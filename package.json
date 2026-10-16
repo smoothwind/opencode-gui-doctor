@@ -1,0 +1,73 @@
+{
+  "name": "opencode-gui-doctor",
+  "version": "0.1.5",
+  "description": "opencode plugin: GUI error diagnosis for coding agents — Playwright trace recording, trace analysis, forked replay probes, and Chrome DevTools (CDP) inspection. Default-safe (allowlists, sandbox, redaction).",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "playwright",
+    "chrome-devtools",
+    "cdp",
+    "trace",
+    "gui",
+    "diagnostics",
+    "electron",
+    "iframe"
+  ],
+  "main": "./plugin/index.ts",
+  "exports": {
+    ".": "./plugin/index.ts",
+    "./plugin": "./plugin/index.ts",
+    "./runtime/*": "./runtime/*",
+    "./skill/*": "./skill/*"
+  },
+  "files": [
+    "plugin",
+    "runtime",
+    "skill"
+  ],
+  "bin": {
+    "gui-doctor": "./runtime/cli.mjs"
+  },
+  "scripts": {
+    "doctor": "node runtime/cli.mjs",
+    "test": "node test/unit.test.mjs && node test/run-scenario.test.mjs && node test/run-cdp.test.mjs",
+    "test:unit": "node test/unit.test.mjs",
+    "test:scenario": "node test/run-scenario.test.mjs",
+    "test:cdp": "node test/run-cdp.test.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "prepack": "tsc -p tsconfig.json",
+    "release": "node scripts/release.mjs",
+    "release:no-bump": "node scripts/release.mjs --no-bump",
+    "release:pack-only": "node scripts/release.mjs --no-bump --no-install",
+    "prepublishOnly": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.18.0"
+  },
+  "peerDependencies": {
+    "playwright": ">=1.40"
+  },
+  "peerDependenciesMeta": {
+    "playwright": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "playwright-core": "^1.40.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "opencode": {
+    "plugin": "./plugin/index.ts",
+    "skill": "./skill"
+  }
+}

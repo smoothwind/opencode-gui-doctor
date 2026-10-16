@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>GUI Doctor Fixture</title>
+  </head>
+  <body>
+    <h1 id="title">GUI Doctor Fixture</h1>
+    <button id="load">Load data</button>
+    <button id="boom">Boom</button>
+    <div id="status">idle</div>
+    <iframe id="child" src="/child.html" width="300" height="120"></iframe>
+    <script>
+      window.__RANDOM__ = Math.random()
+      window.__STATE__ = { result: null, clicks: 0 }
+      try {
+        localStorage.setItem("token", "supersecret")
+        localStorage.setItem("theme", "dark")
+      } catch (e) {}
+
+      async function load() {
+        document.getElementById("status").textContent = "loading"
+        try {
+          const res = await fetch("/api/data")
+          const text = await res.text()
+          if (!res.ok) throw new Error("HTTP " + res.status)
+          window.__STATE__.result = JSON.parse(text).msg
+          document.getElementById("status").textContent = "ok:" + window.__STATE__.result
+        } catch (err) {
+          window.__STATE__.result = "ERR"
+          document.getElementById("status").textContent = "ERR:" + err.message
+          console.error("load failed:", err.message)
+          setTimeout(() => {
+            throw err
+          })
+        }
+      }
+
+      document.getElementById("load").addEventListener("click", load)
+      document.getElementById("boom").addEventListener("click", () => {
+        window.__STATE__.clicks += 1
+        console.error("boom clicked", window.__STATE__.clicks)
+        setTimeout(() => {
+          throw new Error("intentional failure after click #" + window.__STATE__.clicks)
+        })
+      })
+    </script>
+  </body>
+</html>

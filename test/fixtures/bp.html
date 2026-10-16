@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Breakpoint Fixture</title>
+  </head>
+  <body>
+    <button id="bp">Compute</button>
+    <div id="out">-</div>
+    <script src="/bp.js"></script>
+    <script>
+      document.getElementById("bp").addEventListener("click", () => {
+        window.__RESULT__ = window.runCompute(21)
+        document.getElementById("out").textContent = String(window.__RESULT__)
+      })
+    </script>
+  </body>
+</html>

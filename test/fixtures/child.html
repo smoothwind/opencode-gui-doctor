@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>GUI Doctor Child</title>
+  </head>
+  <body>
+    <button id="child-btn">Child button</button>
+    <span id="child-out">0</span>
+    <script>
+      window.__CHILD__ = { n: 0 }
+      document.getElementById("child-btn").addEventListener("click", () => {
+        window.__CHILD__.n += 1
+        document.getElementById("child-out").textContent = String(window.__CHILD__.n)
+      })
+    </script>
+  </body>
+</html>
