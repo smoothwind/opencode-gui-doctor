@@ -27,8 +27,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # The Pages site must exist once before deploying. The default GITHUB_TOKEN
+      # canNOT create it (Pages creation is a repository-administration call), so
+      # either:
+      #   1) enable it once in the UI:  Settings -> Pages -> Build and deployment
+      #      -> Source: "GitHub Actions", then re-run this workflow; or
+      #   2) add a `PAGES_TOKEN` secret (classic PAT with `repo`, or a fine-grained
+      #      token with Pages:write + Administration:write) and this step will
+      #      enable Pages automatically via `enablement: true`.
+      # With no PAGES_TOKEN the step behaves exactly as the plain default.
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          token: ${{ secrets.PAGES_TOKEN || github.token }}
+          enablement: ${{ secrets.PAGES_TOKEN != '' }}
 
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3
