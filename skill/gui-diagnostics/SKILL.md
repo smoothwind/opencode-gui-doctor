@@ -11,14 +11,18 @@ of guessing from source alone.
 
 ## Install
 
-Distributed as the npm plugin `opencode-gui-doctor` (bundles the plugin, runtime
-and this skill). Add it to `opencode.json` and restart opencode:
+Distributed from GitHub (there is no npm package). Install it into the project,
+or clone the repo, add the plugin to `opencode.json`, and restart opencode:
 
-```json
-{ "plugin": ["opencode-gui-doctor"] }
+```bash
+npm i -D github:smoothwind/opencode-gui-doctor
 ```
 
-Local checkout: `{ "plugin": ["./packages/opencode-gui-doctor/plugin/index.ts"] }`.
+```json
+{ "plugin": ["./node_modules/opencode-gui-doctor/plugin/index.ts"] }
+```
+
+Cloned instead? Use `{ "plugin": ["./opencode-gui-doctor/plugin/index.ts"] }`.
 The plugin resolves its runtime relative to itself and registers this skill via
 `skills.paths`, so it works from any project. `playwright` is an optional peer
 dependency — install it in the project being diagnosed.

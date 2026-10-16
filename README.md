@@ -1,9 +1,9 @@
 # opencode-gui-doctor
 
-[![npm](https://img.shields.io/npm/v/opencode-gui-doctor.svg)](https://www.npmjs.com/package/opencode-gui-doctor)
-[![license](https://img.shields.io/npm/l/opencode-gui-doctor.svg)](./LICENSE)
+[![license](https://img.shields.io/github/license/smoothwind/opencode-gui-doctor.svg)](./LICENSE)
+[![release](https://img.shields.io/github/v/tag/smoothwind/opencode-gui-doctor.svg)](https://github.com/smoothwind/opencode-gui-doctor/releases)
 [![docs](https://img.shields.io/badge/docs-github%20pages-blue)](https://smoothwind.github.io/opencode-gui-doctor/)
-[![node](https://img.shields.io/node/v/opencode-gui-doctor.svg)](https://nodejs.org)
+[![pages](https://github.com/smoothwind/opencode-gui-doctor/actions/workflows/pages.yml/badge.svg)](https://github.com/smoothwind/opencode-gui-doctor/actions/workflows/pages.yml)
 
 GUI error diagnosis for coding agents — Playwright trace recording, trace analysis,
 forked replay probes, and Chrome DevTools (CDP) inspection. **Default-safe**
@@ -32,37 +32,55 @@ plugin gives an agent a repeatable way to reproduce and interrogate GUI bugs:
 
 ## Install
 
+Not published to npm — install straight from the GitHub repository.
+
 ### As an opencode plugin
 
+Install it into the project you work in:
+
+```bash
+npm i -D github:smoothwind/opencode-gui-doctor
+```
+
 ```json
-{ "plugin": ["opencode-gui-doctor"] }
+{ "plugin": ["./node_modules/opencode-gui-doctor/plugin/index.ts"] }
+```
+
+Or clone the repo and reference the checkout directly:
+
+```bash
+git clone https://github.com/smoothwind/opencode-gui-doctor
+```
+
+```json
+{ "plugin": ["./opencode-gui-doctor/plugin/index.ts"] }
 ```
 
 Add it to `opencode.json` and restart opencode. The plugin registers the
 `gui-diagnostics` skill, so the agent knows when and how to reach for the tools.
+It resolves its runtime and skill relative to itself, so it works from any
+project.
 
-Local checkout instead of npm:
-
-```json
-{ "plugin": ["./packages/opencode-gui-doctor/plugin/index.ts"] }
-```
-
-The plugin resolves its runtime relative to itself, so it works from any project.
 `playwright` is an **optional peer dependency** — install it in the project you
-are diagnosing:
+are diagnosing, or use a system browser channel to avoid downloads:
 
 ```bash
 npm i -D playwright
-# or use a system browser to avoid downloads:
-#   pass browser.channel: "msedge" | "chrome"
+# or: pass browser.channel: "msedge" | "chrome"
 ```
 
 ### CLI
 
 ```bash
-npm i -g opencode-gui-doctor
+npm i -g github:smoothwind/opencode-gui-doctor
 gui-doctor env
 gui-doctor record --url http://localhost:1420 --channel msedge --steps steps.json
+```
+
+Or, with a project-local install, run it without a global install:
+
+```bash
+npx gui-doctor env
 ```
 
 ## Tools

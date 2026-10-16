@@ -1,19 +1,17 @@
 # Releasing
 
-This repo ships two things automatically from GitHub Actions:
+This project is distributed **from GitHub only** — nothing is published to the
+npm registry. Two workflows take care of the GitHub side:
 
 | Target | Workflow | Trigger |
 | --- | --- | --- |
 | Docs site → GitHub Pages | `.github/workflows/pages.yml` | push to `main` touching `docs/**` or the workflow itself |
-| Package → npm | `.github/workflows/publish.yml` | push of a `v*` tag |
-| Package → npm (one-click) | `.github/workflows/release.yml` | manual `workflow_dispatch` |
+| GitHub Release | `.github/workflows/release.yml` | push of a `v*` tag |
 
-## One-time setup
-
-### 1. Enable GitHub Pages
+## One-time setup: enable GitHub Pages
 
 Creating a Pages site is a **repository-administration** operation, so the
-automatic `GITHUB_TOKEN` can never do it — `configure-pages` will fail with
+automatic `GITHUB_TOKEN` can never do it — `configure-pages` fails with
 `Get Pages site failed ... Not Found` until the site exists.
 
 Enable it **once**, in the browser:
@@ -29,64 +27,49 @@ default token forever.
 > probably **private on the Free plan** (Pages for private repos needs
 > Pro/Team/Enterprise). Make the repo public or upgrade.
 
-Set `enablement: true` (with a `PAGES_TOKEN` secret that has `repo` scope, or
-fine-grained `Pages:write` + `Administration:write`) only if you want CI to
-create the Pages site on a brand-new repo. The committed workflow already wires
-this up conditionally and is a no-op when the secret is absent.
+The workflow still supports an optional `PAGES_TOKEN` secret to auto-create the
+site from CI (classic PAT with `repo` scope, or fine-grained `Pages:write` +
+`Administration:write`). It is a no-op when the secret is absent — the manual
+toggle above is the normal path.
 
-### 2. Add the npm token
+## Cutting a release
 
-> **Settings → Secrets and variables → Actions → New repository secret**
-> Name `NPM_TOKEN`, value an npm **Automation** token (npmjs.com → Access
-> Tokens → Generate New Token → *Automation*) with publish rights on this
-> package.
+1. Bump the version and add a changelog entry, in one commit:
 
-npm publishes are signed with provenance (OIDC), so the workflows set
-`id-token: write`; no long-lived credentials beyond `NPM_TOKEN` are needed.
+   ```bash
+   # edit package.json "version" -> X.Y.Z, and package-lock.json to match
+   # add a "## [X.Y.Z] - YYYY-MM-DD" section to CHANGELOG.md
+   git commit -am "release: vX.Y.Z"
+   ```
 
-## Releasing
+   (`npm version patch --no-git-tag-version` also works if you have npm on
+   hand; it keeps `package.json` and `package-lock.json` in sync.)
 
-### Option A — one-click (recommended)
+2. Tag and push:
 
-Actions → **Release** → **Run workflow**:
+   ```bash
+   git tag -a vX.Y.Z -m "opencode-gui-doctor vX.Y.Z"
+   git push origin main
+   git push origin vX.Y.Z
+   ```
 
-- `version`: `patch` | `minor` | `major` | an explicit `x.y.z`
+3. The **Release** workflow runs: it verifies the tag matches `package.json`'s
+   `version`, then creates a GitHub Release with auto-generated notes. Docs are
+   unaffected unless `docs/**` changed.
 
-The workflow typechecks, runs `npm version`, commits, pushes `main` and the
-`v<version>` tag, then publishes with provenance.
-
-> This exists as a single run on purpose: a tag pushed with the workflow's
-> `GITHUB_TOKEN` **does not** trigger another workflow (GitHub suppresses
-> workflow runs caused by `GITHUB_TOKEN` to prevent recursion), so an
-> "auto-tag on version bump" step would silently never publish.
-
-### Option B — manual tag
-
-```bash
-# bump package.json (and package-lock.json) to X.Y.Z first
-git commit -am "release: vX.Y.Z"
-git tag -a vX.Y.Z -m "opencode-gui-doctor vX.Y.Z"
-git push origin main
-git push origin vX.Y.Z     # triggers "Publish to npm"
-```
-
-The publish workflow refuses to run if the pushed tag does not match
-`package.json`'s `version`.
+No token or secret is needed for the Release workflow — it uses the default
+`GITHUB_TOKEN` with `contents: write`.
 
 ## Versioning policy
 
 - SemVer; `0.x` while the API stabilises.
-- Add a `## [X.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md` in the same commit
-  that bumps the version.
-- `scripts/release.mjs` (`npm run release`) is a local alternative that bumps the
-  patch version, packs, and optionally installs the tarball globally for
-  dogfooding — it does **not** publish to the registry.
+- Keep `package.json`, `package-lock.json`, `CHANGELOG.md` and the tag in sync —
+  the Release workflow fails if the tag and `package.json` disagree.
+- `scripts/release.mjs` (`npm run release`) is a local helper that bumps the
+  patch version, packs a tarball, and optionally installs it globally for
+  dogfooding. It does **not** publish anything.
 
 ## Verifying a release
 
-```bash
-npm view opencode-gui-doctor version
-npx opencode-gui-doctor env      # or: gui-doctor env, after a global install
-```
-
-Site: <https://smoothwind.github.io/opencode-gui-doctor/>
+- Release notes: <https://github.com/smoothwind/opencode-gui-doctor/releases>
+- Site: <https://smoothwind.github.io/opencode-gui-doctor/>

@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Initial public release as the npm package `opencode-gui-doctor`.
+- Initial public release.
 - opencode plugin plus the `gui-diagnostics` skill, exposing six tools:
   `gui_doctor_env`, `gui_trace_record`, `gui_trace_analyze`, `gui_probe_fork`,
   `gui_cdp_inspect`, `gui_bisect`.

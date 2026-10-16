@@ -162,7 +162,7 @@
         </p>
         <div class="cta">
           <a class="btn primary" href="#install">Get started</a>
-          <a class="btn" href="https://www.npmjs.com/package/opencode-gui-doctor">npm</a>
+          <a class="btn" href="https://github.com/smoothwind/opencode-gui-doctor/releases">Releases</a>
           <a class="btn" href="https://github.com/smoothwind/opencode-gui-doctor">GitHub</a>
         </div>
       </div>
@@ -184,19 +184,21 @@
 
       <section id="install">
         <h2><span class="num">01</span>Install</h2>
+        <p class="note">Not published to npm — install straight from the GitHub repository.</p>
         <h3 class="sub">As an opencode plugin</h3>
-        <pre><code>{ "plugin": ["opencode-gui-doctor"] }</code></pre>
-        <p>Add it to <code>opencode.json</code> and restart opencode. The plugin registers the <code>gui-diagnostics</code> skill, so the agent knows when and how to reach for the tools.</p>
-        <p class="note">Local checkout: <code>{ "plugin": ["./packages/opencode-gui-doctor/plugin/index.ts"] }</code></p>
+        <pre><code>npm i -D github:smoothwind/opencode-gui-doctor</code></pre>
+        <pre><code>{ "plugin": ["./node_modules/opencode-gui-doctor/plugin/index.ts"] }</code></pre>
+        <p>Or clone the repo and reference the checkout directly: <code>{ "plugin": ["./opencode-gui-doctor/plugin/index.ts"] }</code></p>
+        <p>Add it to <code>opencode.json</code> and restart opencode. The plugin registers the <code>gui-diagnostics</code> skill, so the agent knows when and how to reach for the tools. It resolves its runtime and skill relative to itself, so it works from any project.</p>
         <p>
-          The plugin resolves its runtime relative to itself, so it works from any project. <code>playwright</code> is an
-          <strong>optional peer dependency</strong> — install it in the project you are diagnosing, or pass
+          <code>playwright</code> is an <strong>optional peer dependency</strong> — install it in the project you are diagnosing, or pass
           <code>browser.channel: "msedge" | "chrome"</code> to reuse a system browser and avoid downloads.
         </p>
         <h3 class="sub">CLI</h3>
-        <pre><code>npm i -g opencode-gui-doctor
+        <pre><code>npm i -g github:smoothwind/opencode-gui-doctor
 gui-doctor env
 gui-doctor record --url http://localhost:1420 --channel msedge --steps steps.json</code></pre>
+        <p class="note">With a project-local install you can skip the global one: <code>npx gui-doctor env</code></p>
       </section>
 
       <section id="tools">
@@ -325,7 +327,7 @@ gui-doctor run     &lt;job.json&gt; [--project &lt;dir&gt;]</code></pre>
     <footer class="site">
       <div class="wrap">
         <span>MIT licensed · <a href="https://github.com/smoothwind/opencode-gui-doctor">smoothwind/opencode-gui-doctor</a></span>
-        <span><a href="https://www.npmjs.com/package/opencode-gui-doctor">npm</a> · <a href="https://github.com/smoothwind/opencode-gui-doctor/issues">issues</a></span>
+        <span><a href="https://github.com/smoothwind/opencode-gui-doctor/releases">releases</a> · <a href="https://github.com/smoothwind/opencode-gui-doctor/issues">issues</a></span>
       </div>
     </footer>
   </body>

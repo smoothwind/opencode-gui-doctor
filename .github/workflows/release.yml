@@ -1,80 +1,62 @@
 name: Release
 
-# One-click release: bump the version, commit + tag, push, and publish to npm in
-# a single run.
+# Creates a GitHub Release for a version tag. Nothing is published to npm —
+# this repository is distributed from GitHub only.
 #
-# Why not just tag and let `publish.yml` fire? Because a tag pushed with the
-# workflow's own GITHUB_TOKEN does NOT trigger another workflow run (GitHub
-# suppresses runs caused by GITHUB_TOKEN to avoid recursion), so an auto-tag
-# step would silently never publish. `publish.yml` still handles tags you push
-# yourself (Option B in RELEASING.md).
+# Triggers:
+#   - push of a `v*` tag; or
+#   - manual dispatch with an existing tag (useful for tags pushed before this
+#     workflow existed).
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
-      version:
-        description: "Version to release: patch | minor | major | <x.y.z>"
+      tag:
+        description: "Existing tag to release (e.g. v0.1.5)"
         required: true
-        default: patch
         type: string
 
 permissions:
-  contents: write # push the version commit and tag
-  id-token: write # npm provenance (OIDC)
-
-concurrency:
-  group: release
-  cancel-in-progress: false
+  contents: write # create the release
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    environment: npm
     steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ steps.tag.outputs.name }}
           fetch-depth: 0
 
-      - name: Require main
+      - name: Verify tag matches package.json version
         run: |
-          if [ "${GITHUB_REF_NAME}" != "main" ]; then
-            echo "::error::run this workflow from the main branch (current: ${GITHUB_REF_NAME})"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          TAG_VERSION="${{ steps.tag.outputs.name }}"
+          TAG_VERSION="${TAG_VERSION#v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::tag ${{ steps.tag.outputs.name }} does not match package.json version ${PKG_VERSION}"
             exit 1
           fi
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          registry-url: https://registry.npmjs.org
-          cache: npm
-
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Bump version and tag
-        id: bump
-        run: |
-          npm version "${{ inputs.version }}" -m "release: v%s"
-          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-
-      - name: Push commit and tag
-        run: |
-          git push origin HEAD:main
-          git push origin "v${{ steps.bump.outputs.version }}"
-
-      - name: Publish to npm
-        run: npm publish --provenance --access public
+      - name: Create GitHub Release
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Summary
-        run: echo "Released opencode-gui-doctor@${{ steps.bump.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG already exists — nothing to do"
+          else
+            gh release create "$TAG" --generate-notes --verify-tag
+          fi
