@@ -220,6 +220,11 @@ attached to tool results as `application/zip`.
 - Playwright (optional peer dependency) — or a system Chrome/Edge channel
 - Chromium for CDP breakpoint probes and the DevTools perf trace
 
+## Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md). Release process is documented in
+[RELEASING.md](./RELEASING.md).
+
 ## License
 
 [MIT](./LICENSE)
