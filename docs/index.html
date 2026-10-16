@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>opencode-gui-doctor — GUI error diagnosis for coding agents</title>
+    <meta
+      name="description"
+      content="opencode plugin for GUI error diagnosis: Playwright trace recording, trace analysis, forked replay probes, and Chrome DevTools (CDP) inspection. Default-safe (allowlists, sandbox, redaction)."
+    />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A9%BA%3C/text%3E%3C/svg%3E" />
+    <style>
+      :root {
+        --bg: #0b0f14;
+        --bg-soft: #0f1720;
+        --panel: #131c26;
+        --panel-2: #182430;
+        --border: #223040;
+        --text: #e6edf3;
+        --muted: #9fb0c0;
+        --accent: #4cc2ff;
+        --accent-2: #7bffcf;
+        --code-bg: #0a1017;
+        --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        --radius: 12px;
+        --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+        --sans: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f7f9fc;
+          --bg-soft: #eef3f8;
+          --panel: #ffffff;
+          --panel-2: #f3f7fb;
+          --border: #d8e2ec;
+          --text: #16212c;
+          --muted: #5b6b7b;
+          --accent: #0b6bcb;
+          --accent-2: #0f9d76;
+          --code-bg: #f2f6fa;
+          --shadow: 0 10px 30px rgba(20, 40, 60, 0.08);
+        }
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        font-family: var(--sans);
+        color: var(--text);
+        background:
+          radial-gradient(1200px 600px at 80% -10%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%),
+          radial-gradient(900px 500px at 0% 0%, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 55%),
+          var(--bg);
+        line-height: 1.65;
+      }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .wrap { max-width: 980px; margin: 0 auto; padding: 0 20px; }
+
+      header.site {
+        position: sticky; top: 0; z-index: 10;
+        backdrop-filter: blur(10px);
+        background: color-mix(in srgb, var(--bg) 78%, transparent);
+        border-bottom: 1px solid var(--border);
+      }
+      header.site .wrap { display: flex; align-items: center; gap: 16px; height: 60px; }
+      .brand { font-weight: 700; letter-spacing: 0.2px; display: flex; align-items: center; gap: 9px; }
+      .brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent-2); box-shadow: 0 0 12px var(--accent-2); }
+      nav.top { margin-left: auto; display: flex; gap: 18px; flex-wrap: wrap; }
+      nav.top a { color: var(--muted); font-size: 0.92rem; }
+      nav.top a:hover { color: var(--text); }
+
+      .hero { padding: 72px 0 40px; }
+      .pill {
+        display: inline-block; font-size: 0.78rem; color: var(--accent);
+        border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+        background: color-mix(in srgb, var(--accent) 12%, transparent);
+        padding: 4px 11px; border-radius: 999px; margin-bottom: 18px;
+      }
+      h1 { font-size: clamp(2rem, 5vw, 3.1rem); line-height: 1.1; margin: 0 0 16px; letter-spacing: -0.02em; }
+      h1 .grad { background: linear-gradient(90deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+      .lede { font-size: 1.14rem; color: var(--muted); max-width: 720px; }
+      .cta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 26px; }
+      .btn {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 0.95rem;
+        border: 1px solid var(--border); background: var(--panel); color: var(--text);
+      }
+      .btn:hover { text-decoration: none; border-color: var(--accent); }
+      .btn.primary { background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #04121a; border: none; }
+
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin: 26px 0 10px; }
+      .card {
+        background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+        padding: 16px 18px; box-shadow: var(--shadow);
+      }
+      .card h3 { margin: 0 0 6px; font-size: 1rem; }
+      .card p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+
+      section { padding: 34px 0; border-top: 1px solid var(--border); }
+      section:first-of-type { border-top: none; }
+      h2 { font-size: 1.5rem; margin: 0 0 14px; letter-spacing: -0.01em; }
+      h2 .num { color: var(--muted); font-weight: 600; margin-right: 8px; }
+      h3.sub { margin: 22px 0 8px; font-size: 1.05rem; }
+      p { margin: 0 0 12px; }
+      ul { margin: 0 0 12px; padding-left: 22px; }
+      li { margin: 5px 0; }
+      code {
+        font-family: var(--mono); font-size: 0.86em;
+        background: var(--code-bg); border: 1px solid var(--border);
+        padding: 1.5px 6px; border-radius: 6px;
+      }
+      pre {
+        background: var(--code-bg); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 16px 18px; overflow-x: auto;
+        box-shadow: var(--shadow); margin: 0 0 14px;
+      }
+      pre code { background: none; border: none; padding: 0; font-size: 0.86rem; line-height: 1.6; }
+      .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 14px; }
+      table { border-collapse: collapse; width: 100%; font-size: 0.92rem; background: var(--panel); }
+      th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+      th { background: var(--panel-2); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+      tr:last-child td { border-bottom: none; }
+      td code { white-space: nowrap; }
+      .note { color: var(--muted); font-size: 0.9rem; }
+      ol.steps { counter-reset: s; list-style: none; padding-left: 0; }
+      ol.steps > li { position: relative; padding-left: 44px; margin: 14px 0; }
+      ol.steps > li::before {
+        counter-increment: s; content: counter(s);
+        position: absolute; left: 0; top: 1px; width: 28px; height: 28px; border-radius: 50%;
+        display: grid; place-items: center; font-weight: 700; font-size: 0.85rem;
+        background: color-mix(in srgb, var(--accent) 16%, transparent);
+        border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); color: var(--accent);
+      }
+      footer.site { padding: 34px 0 60px; color: var(--muted); font-size: 0.9rem; border-top: 1px solid var(--border); }
+      footer.site .wrap { display: flex; gap: 18px; flex-wrap: wrap; justify-content: space-between; }
+    </style>
+  </head>
+  <body>
+    <header class="site">
+      <div class="wrap">
+        <span class="brand"><span class="dot"></span>opencode-gui-doctor</span>
+        <nav class="top">
+          <a href="#install">Install</a>
+          <a href="#tools">Tools</a>
+          <a href="#workflow">Workflow</a>
+          <a href="#security">Security</a>
+          <a href="#cli">CLI</a>
+          <a href="https://github.com/smoothwind/opencode-gui-doctor">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <div class="hero">
+        <span class="pill">opencode plugin · skill + CLI</span>
+        <h1>GUI error diagnosis<br /><span class="grad">for coding agents</span></h1>
+        <p class="lede">
+          Turn a reproducible GUI failure into a recorded Playwright trace, a structured digest, and
+          <strong>forked replay probes</strong> that test hypotheses in isolation — instead of guessing from source alone.
+          Default-safe: allowlists, filesystem sandbox, and secret redaction.
+        </p>
+        <div class="cta">
+          <a class="btn primary" href="#install">Get started</a>
+          <a class="btn" href="https://www.npmjs.com/package/opencode-gui-doctor">npm</a>
+          <a class="btn" href="https://github.com/smoothwind/opencode-gui-doctor">GitHub</a>
+        </div>
+      </div>
+
+      <section id="why">
+        <h2>Why</h2>
+        <p>
+          When a UI action errors, renders wrong, or silently fails, the stack trace alone is often not enough. You need
+          the console output, the failed network calls, and the app state <em>around</em> that specific click. This plugin
+          gives an agent a repeatable way to reproduce and interrogate GUI bugs.
+        </p>
+        <div class="grid">
+          <div class="card"><h3>Record</h3><p>Scripted Playwright scenarios with tracing → console / network / error capture plus a readable digest.</p></div>
+          <div class="card"><h3>Fork</h3><p>Replay to any step across isolated variants (init scripts, route mocks, patches) and diff against a baseline.</p></div>
+          <div class="card"><h3>Bisect</h3><p>Replay steps one-by-one and find the first action that triggers the failure.</p></div>
+          <div class="card"><h3>Attach</h3><p>Live CDP inspection of a running Chrome / Chromium / Electron for perf traces and real-state probing.</p></div>
+        </div>
+      </section>
+
+      <section id="install">
+        <h2><span class="num">01</span>Install</h2>
+        <h3 class="sub">As an opencode plugin</h3>
+        <pre><code>{ "plugin": ["opencode-gui-doctor"] }</code></pre>
+        <p>Add it to <code>opencode.json</code> and restart opencode. The plugin registers the <code>gui-diagnostics</code> skill, so the agent knows when and how to reach for the tools.</p>
+        <p class="note">Local checkout: <code>{ "plugin": ["./packages/opencode-gui-doctor/plugin/index.ts"] }</code></p>
+        <p>
+          The plugin resolves its runtime relative to itself, so it works from any project. <code>playwright</code> is an
+          <strong>optional peer dependency</strong> — install it in the project you are diagnosing, or pass
+          <code>browser.channel: "msedge" | "chrome"</code> to reuse a system browser and avoid downloads.
+        </p>
+        <h3 class="sub">CLI</h3>
+        <pre><code>npm i -g opencode-gui-doctor
+gui-doctor env
+gui-doctor record --url http://localhost:1420 --channel msedge --steps steps.json</code></pre>
+      </section>
+
+      <section id="tools">
+        <h2><span class="num">02</span>Tools</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><code>gui_doctor_env</code></td><td>Check Node, Playwright resolution, and available Chrome/Edge. Run <strong>first</strong>.</td></tr>
+              <tr><td><code>gui_trace_record</code></td><td>Run a scripted UI scenario with Playwright tracing; capture console/network/errors + a digest. Writes <code>trace.zip</code> (open with <code>npx playwright show-trace</code>).</td></tr>
+              <tr><td><code>gui_trace_analyze</code></td><td>Parse a <code>trace.zip</code> or run dir into failed actions, page errors, console errors, failed requests, slowest actions.</td></tr>
+              <tr><td><code>gui_probe_fork</code></td><td><strong>Forked replay probe</strong>: replay a scenario to a <code>forkAt</code> step across isolated variants and read probes; diffs against the <code>baseline</code> fork.</td></tr>
+              <tr><td><code>gui_cdp_inspect</code></td><td>Attach to a running Chrome/Chromium/Electron over CDP, collect console/exceptions/failed requests, run probes, record a DevTools perf trace.</td></tr>
+              <tr><td><code>gui_bisect</code></td><td>Replay steps one-by-one, probe after each, and report the <strong>first step</strong> that triggers a failure (or a custom <code>until</code> predicate).</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">Iframes: add <code>frame: ["#my-iframe", ".inner"]</code> to any step to scope it into an iframe chain. Probes can read across same-origin frames.</p>
+      </section>
+
+      <section id="workflow">
+        <h2><span class="num">03</span>Workflow</h2>
+        <ol class="steps">
+          <li><code>gui_doctor_env</code> — confirm Playwright + a browser channel.</li>
+          <li><code>gui_trace_record</code> — reproduce the bug with <code>steps</code> (<code>goto</code>, <code>click</code>, <code>fill</code>, <code>expectText</code>, …) and read the digest. <code>expect*</code> assertions auto-wait, and each step result lists the errors observed during that step.</li>
+          <li><code>gui_trace_analyze</code> — drill into the produced <code>trace.zip</code> for full error/console/network lists.</li>
+          <li><code>gui_probe_fork</code> — form 2+ hypotheses as forks that share a replay prefix; compare <code>changedProbes</code> and <code>failedStepDelta</code> against <code>baseline</code>.</li>
+          <li><code>gui_cdp_inspect</code> — when the app is already running (dev server + browser with <code>--remote-debugging-port</code>, or Electron), attach live for perf traces and real-state probing.</li>
+        </ol>
+
+        <h3 class="sub">Forked replay example</h3>
+        <pre><code>{
+  "url": "http://127.0.0.1:5173",
+  "target": "web",
+  "steps": [
+    { "action": "click", "selector": "#open-modal" },
+    { "action": "click", "selector": "#submit" }
+  ],
+  "forks": [
+    { "id": "baseline", "forkAt": 1, "probes": [{ "name": "state", "expression": "() =&gt; window.__STATE__" }] },
+    { "id": "api-500", "forkAt": 1, "routeMocks": [{ "url": "**/api/submit", "status": 500, "body": {} }],
+      "probes": [{ "name": "state", "expression": "() =&gt; window.__STATE__" }] },
+    { "id": "disable-cache", "forkAt": 1, "initScripts": ["sessionStorage.clear = () =&gt; {}"],
+      "probes": [{ "name": "state", "expression": "() =&gt; window.__STATE__" }] }
+  ]
+}</code></pre>
+        <p>If only <code>api-500</code> reproduces the failure, the root cause is the error path around the API. If <code>disable-cache</code> changes behavior, investigate caching. <code>diff.diffs[].changedProbes</code> lists exactly what diverged.</p>
+      </section>
+
+      <section id="advanced">
+        <h2><span class="num">04</span>Advanced diagnosis</h2>
+        <ul>
+          <li><strong>Flake detection</strong> (<code>runs: N</code>): replays N times, each with a fresh browser, reporting a per-step pass/fail matrix and the flaky steps.</li>
+          <li><strong>Failure evidence</strong> (<code>capture</code>): <code>screenshotOnFailure</code>, <code>video</code>, and failed request/response <code>body</code> capture (bounded, key-aware redaction applies).</li>
+          <li><strong>Parallel forks</strong> (<code>forkConcurrency</code>): run up to N fork variants concurrently, each with its own isolated browser and a fork-suffixed container label.</li>
+          <li><strong>CDP ownership</strong> (<code>closeOnExit</code>): leave the attached browser running (default) or kill it via raw CDP on exit.</li>
+          <li><strong>Artifact retention</strong> (<code>retention</code>): prunes old <code>runs/</code> directories and halves <code>audit.log</code> past a size cap.</li>
+          <li><strong>Deterministic forks</strong> (<code>determinism</code>): record <code>network.har</code> once, replay it so forks see identical upstream responses; <code>seed</code> fixes <code>Math.random</code>, <code>clockTime</code> freezes the page clock.</li>
+          <li><strong>CDP breakpoint probes</strong> (<code>breakpointProbes</code>): pause at a script <code>url</code>/<code>line</code> and read locals via <code>evaluateOnCallFrame</code> (Chromium only, auto-resumes).</li>
+          <li><strong>Source maps</strong>: stacks are best-effort mapped back to <code>.ts</code>/<code>.vue</code>.</li>
+          <li><strong>Visual + a11y diff</strong>: changed-pixel ratio and an accessibility-tree line diff versus the <code>baseline</code> fork.</li>
+        </ul>
+      </section>
+
+      <section id="security">
+        <h2><span class="num">05</span>Security policy (default-safe)</h2>
+        <p>The plugin is <strong>default-deny</strong> and enforced by both the plugin (permission gating) and the harness (runtime enforcement):</p>
+        <ul>
+          <li><strong>No JavaScript injection by default.</strong> <code>probes</code>, <code>initScripts</code>, <code>routeMocks</code>, <code>patchAfterLoad</code> and <code>evaluate</code> steps are refused unless <code>allowJsProbes</code> is enabled.</li>
+          <li><strong>Outbound allowlist.</strong> Navigation is limited to <code>localhost / 127.0.0.1 / [::1]</code> by default; anything else asks for <code>gui.navigate</code>. Same for CDP endpoints (<code>gui.cdp</code>).</li>
+          <li><strong>Filesystem sandbox.</strong> <code>initScripts</code> paths, <code>storageState</code>, <code>outputDir</code> and Electron executables must live inside the project root (or <code>allowedPaths</code>).</li>
+          <li><strong>Redaction.</strong> Console text, page errors, probe results and network URLs are scrubbed of secrets (Authorization/Cookie/JWT/Bearer/AWS/GitHub tokens + sensitive key names) before returning to the model.</li>
+          <li><strong>Raw traces are not attached by default.</strong> The redacted <code>diagnostics.json</code> is attached instead.</li>
+          <li><strong>Audit log.</strong> Every run, navigation and JS grant is appended to <code>.gui-doctor/audit.log</code>.</li>
+        </ul>
+        <pre><code>{
+  "allowedOrigins": ["http://localhost:*", "https://staging.myapp.com"],
+  "cdpAllowedEndpoints": ["http://127.0.0.1:*"],
+  "allowJsProbes": false,
+  "allowedPaths": ["../shared-fixtures"],
+  "redaction": { "allowAttachRawTrace": false, "entropyHeuristic": false },
+  "timeouts": { "step": 15000, "harness": 240000 }
+}</code></pre>
+        <p class="note">Env overrides: <code>GUI_DOCTOR_ALLOW_JS=1</code>, <code>GUI_DOCTOR_ALLOWED_ORIGINS=…</code>, <code>GUI_DOCTOR_ALLOW_RAW_TRACE=1</code>, <code>GUI_DOCTOR_NODE=/path/to/node</code>.</p>
+      </section>
+
+      <section id="cli">
+        <h2><span class="num">06</span>CLI reference</h2>
+        <pre><code>gui-doctor env     [--project &lt;dir&gt;] [--json]
+gui-doctor analyze &lt;trace.zip|run-dir&gt; [--project &lt;dir&gt;]
+gui-doctor record  --url &lt;url&gt; [options]
+gui-doctor fork    --url &lt;url&gt; --forks &lt;file|json&gt; [options]
+gui-doctor bisect  --url &lt;url&gt; --steps &lt;file|json&gt; [options]
+gui-doctor cdp     [--endpoint http://127.0.0.1:9222] [options]
+gui-doctor run     &lt;job.json&gt; [--project &lt;dir&gt;]</code></pre>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Flag</th><th>Meaning</th></tr></thead>
+            <tbody>
+              <tr><td><code>--project &lt;dir&gt;</code></td><td>Project root (sandbox root; default: cwd)</td></tr>
+              <tr><td><code>--out &lt;dir&gt;</code></td><td>Output dir (must live inside <code>--project</code>)</td></tr>
+              <tr><td><code>--json</code></td><td>Print the full JSON result instead of a digest</td></tr>
+              <tr><td><code>--allow-js</code></td><td>Permit page JavaScript (probes / init scripts / evaluate)</td></tr>
+              <tr><td><code>--har &lt;path&gt;</code></td><td>Replay network from a recorded HAR (fork/bisect)</td></tr>
+              <tr><td><code>--seed &lt;n&gt;</code></td><td>Seed <code>Math.random</code> (mulberry32)</td></tr>
+              <tr><td><code>--clock &lt;iso|ms&gt;</code></td><td>Freeze the page clock</td></tr>
+              <tr><td><code>--container-label &lt;s&gt;</code></td><td>Label shown by the visible container</td></tr>
+              <tr><td><code>--no-container</code></td><td>Disable the visible container (default: on)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">Run <code>gui-doctor --help</code> for the full flag list.</p>
+      </section>
+
+      <section id="artifacts">
+        <h2><span class="num">07</span>Requirements &amp; artifacts</h2>
+        <ul>
+          <li>Node.js <strong>&ge; 20</strong></li>
+          <li>Playwright (optional peer dependency) — or a system Chrome/Edge channel</li>
+          <li>Chromium for CDP breakpoint probes and the DevTools perf trace</li>
+          <li>Artifacts are written under <code>&lt;project&gt;/.gui-doctor/</code> (<code>runs/</code>, <code>jobs/</code>); traces are attached to tool results as <code>application/zip</code>.</li>
+        </ul>
+      </section>
+    </main>
+
+    <footer class="site">
+      <div class="wrap">
+        <span>MIT licensed · <a href="https://github.com/smoothwind/opencode-gui-doctor">smoothwind/opencode-gui-doctor</a></span>
+        <span><a href="https://www.npmjs.com/package/opencode-gui-doctor">npm</a> · <a href="https://github.com/smoothwind/opencode-gui-doctor/issues">issues</a></span>
+      </div>
+    </footer>
+  </body>
+</html>

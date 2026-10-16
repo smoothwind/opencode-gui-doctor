@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Build / release artifacts
+dist/
+*.tgz
+
+# gui-doctor runtime output
+.gui-doctor/
+
+# Logs / env / editor
+*.log
+.env
+.env.*
+.DS_Store
+Thumbs.db
