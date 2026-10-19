@@ -12,11 +12,19 @@ function scopeRoot(page, step, ctx = {}) {
   return root
 }
 
+// A step targets an element via selector/ref or a data-testid (both spellings
+// accepted: the plugin schema exposes camelCase `testId`, the runtime
+// historically read lowercase `testid`).
+function hasTarget(step) {
+  return Boolean(step?.selector || step?.ref || step?.target || step?.testid || step?.testId)
+}
+
 function resolveLocator(page, step, ctx = {}) {
   const root = scopeRoot(page, step, ctx)
-  if (step.testid) return root.getByTestId(step.testid)
+  const testid = step.testid ?? step.testId
+  if (testid) return root.getByTestId(testid)
   const ref = step.selector ?? step.ref ?? step.target
-  if (!ref) throw new Error(`step requires 'selector'/'ref'/'testid': ${JSON.stringify(step)}`)
+  if (!ref) throw new Error(`step requires 'selector'/'ref'/'testId': ${JSON.stringify(step)}`)
   return root.locator(ref)
 }
 
@@ -56,8 +64,7 @@ export async function runStep(page, step, ctx = {}) {
         else await loc.type(step.value ?? "", opts)
       }
     } else if (action === "press") {
-      const hasTarget = Boolean(step.selector || step.ref || step.target)
-      if (hasTarget) {
+      if (hasTarget(step)) {
         await resolveLocator(page, step, ctx).press(step.value, opts)
       } else {
         // Global key press: with an iframe container, route the key into the app
@@ -79,7 +86,7 @@ export async function runStep(page, step, ctx = {}) {
       await resolveLocator(page, step, ctx).waitFor({ state, timeout })
     } else if (action === "waitForTimeout" || action === "wait") {
       const ms = Number(step.value ?? step.ms ?? 500)
-      if (step.selector || step.ref) await resolveLocator(page, step, ctx).waitFor({ state: step.state ?? "visible", timeout: ms })
+      if (hasTarget(step)) await resolveLocator(page, step, ctx).waitFor({ state: step.state ?? "visible", timeout: ms })
       else await page.waitForTimeout(ms)
     } else if (action === "waitForLoadState") {
       if (ctx.container?.kind === "iframe") await waitForAppLoadState(page, ctx.container, step.value ?? "networkidle", { timeout })
@@ -99,7 +106,7 @@ export async function runStep(page, step, ctx = {}) {
         await page.goBack({ waitUntil: step.waitUntil ?? "load", timeout })
       }
     } else if (action === "scroll") {
-      if (step.selector || step.ref || step.testid) await resolveLocator(page, step, ctx).scrollIntoViewIfNeeded(opts)
+      if (hasTarget(step)) await resolveLocator(page, step, ctx).scrollIntoViewIfNeeded(opts)
       else await page.mouse.wheel(Number(step.dx ?? 0), Number(step.dy ?? step.value ?? 300))
     } else if (action === "scrollIntoViewIfNeeded") {
       await resolveLocator(page, step, ctx).scrollIntoViewIfNeeded(opts)
@@ -127,12 +134,21 @@ export async function runStep(page, step, ctx = {}) {
     } else if (action === "expectText") {
       const expected = String(step.value ?? step.expect ?? "")
       const mode = step.mode ?? "contains"
-      const deadline = Date.now() + (timeout ?? 5000)
+      const limit = timeout ?? 5000
+      const deadline = Date.now() + limit
+      const loc = resolveLocator(page, step, ctx)
+      // innerText throws when the element is missing, so wait for it to attach
+      // first, then poll its text (short per-read timeout) until the deadline.
+      await loc.waitFor({ state: "attached", timeout: limit }).catch(() => {})
       let actual = ""
       for (;;) {
-        actual = (await resolveLocator(page, step, ctx).innerText(opts)).trim()
+        try {
+          actual = (await loc.innerText({ timeout: 250 })).trim()
+        } catch {
+          actual = ""
+        }
         if (mode === "equals" ? actual === expected : actual.includes(expected)) break
-        if (Date.now() > deadline) throw new Error(`expectText(${mode}) failed within ${timeout ?? 5000}ms: expected "${expected}", got "${actual}"`)
+        if (Date.now() > deadline) throw new Error(`expectText(${mode}) failed within ${limit}ms: expected "${expected}", got "${actual || "<no element>"}"`)
         await page.waitForTimeout(100)
       }
       result.value = actual

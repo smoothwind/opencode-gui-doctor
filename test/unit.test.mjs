@@ -185,6 +185,39 @@ check("presets: resolveProbeExpression resolves and validates presets", () => {
   assert.ok(presetNames().includes("vue") && presetNames().includes("pinia") && presetNames().includes("react"))
 })
 
+// --- actions (mock page) -------------------------------------------------------
+const actions = await import(lib("actions.mjs"))
+await (async () => {
+  const calls = []
+  const mkLocator = () => ({ click: async () => {}, press: async () => {}, waitFor: async () => {}, innerText: async () => "x", scrollIntoViewIfNeeded: async () => {} })
+  const page = {
+    locator: (ref) => {
+      calls.push(`locator:${ref}`)
+      return mkLocator()
+    },
+    getByTestId: (tid) => {
+      calls.push(`testid:${tid}`)
+      return mkLocator()
+    },
+    waitForTimeout: async () => {},
+    keyboard: { press: async () => {} },
+    mouse: { wheel: async () => {} },
+  }
+
+  await actions.runStep(page, { action: "click", testId: "submit-btn" }, { index: 0 })
+  check("actions: plugin-style camelCase testId resolves via getByTestId", () => assert.ok(calls.includes("testid:submit-btn"), JSON.stringify(calls)))
+
+  await actions.runStep(page, { action: "click", testid: "submit-btn" }, { index: 0 })
+  check("actions: lowercase testid still resolves", () => assert.equal(calls.filter((c) => c === "testid:submit-btn").length, 2, JSON.stringify(calls)))
+
+  // runStep records missing-target failures on its result rather than throwing.
+  const res = await actions.runStep(page, { action: "click" }, { index: 0 })
+  check("actions: missing target fails with a hint", () => {
+    assert.equal(res.ok, false)
+    assert.match(res.error ?? "", /selector|testId/)
+  })
+})()
+
 const failed = results.filter((r) => !r.ok)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 if (failed.length) process.exit(1)

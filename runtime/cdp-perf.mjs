@@ -127,8 +127,14 @@ async function main() {
       const d = p.exceptionDetails ?? {}
       result.pageErrors.push({ message: truncate(d.exception?.description ?? d.text, 3000) })
     })
+    // loadingFailed carries only a requestId — map it back to the URL via the
+    // requestWillBeSent events.
+    const requestUrls = new Map()
+    client.on("Network.requestWillBeSent", (p) => {
+      if (p?.request?.url) requestUrls.set(p.requestId, p.request.url)
+    })
     client.on("Network.loadingFailed", (p) => {
-      result.failedRequests.push({ requestId: p.requestId, error: p.errorText, blockedReason: p.blockedReason })
+      result.failedRequests.push({ url: requestUrls.get(p.requestId) ?? null, requestId: p.requestId, error: p.errorText, blockedReason: p.blockedReason })
     })
     client.on("Network.responseReceived", (p) => {
       const r = p.response ?? {}
@@ -139,6 +145,12 @@ async function main() {
 
     let perfFile = null
     let chunks = []
+    // Start tracing BEFORE navigating so the perf trace covers the first load.
+    const perfOn = job.perf?.enabled !== false
+    if (perfOn) {
+      emitProgress({ phase: "perf", target: "cdp" })
+      chunks = await collectPerfTrace(client, job.perf?.categories)
+    }
     if (job.goto) {
       const loaded = client.waitFor("Page.loadEventFired", { timeoutMs: job.navigateTimeout ?? 30000 }).catch(() => null)
       await client.send("Page.navigate", { url: job.goto })
@@ -157,12 +169,8 @@ async function main() {
       }
     }
 
-    if (job.perf?.enabled !== false) {
-      emitProgress({ phase: "perf", target: "cdp" })
-      chunks = await collectPerfTrace(client, job.perf?.categories)
-      if (job.perf?.reload && job.goto) {
-        await client.send("Page.reload", {}).catch(() => {})
-      }
+    if (perfOn && job.perf?.reload && job.goto) {
+      await client.send("Page.reload", {}).catch(() => {})
     }
 
     // let the app run while we observe

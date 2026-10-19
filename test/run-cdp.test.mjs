@@ -3,7 +3,7 @@ import fs from "node:fs"
 import http from "node:http"
 import os from "node:os"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const runtime = path.join(here, "..", "runtime")
@@ -14,11 +14,6 @@ const results = []
 const check = (name, cond, detail = "") => {
   results.push({ name, ok: !!cond, detail })
   console.log(`${cond ? "PASS" : "FAIL"}  ${name}${cond ? "" : `  -> ${detail}`}`)
-}
-
-function findEdge() {
-  const candidates = ["C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe", "C:/Program Files/Microsoft/Edge/Application/msedge.exe"]
-  return candidates.find((p) => fs.existsSync(p))
 }
 
 function startServer(htmlFile) {
@@ -44,17 +39,21 @@ async function waitForCdp(port, timeoutMs = 20000) {
 }
 
 async function main() {
-  const edge = findEdge()
-  if (!edge) {
-    console.log("SKIP  CDP test (no Edge browser found)")
+  // Any Chromium-family browser works over CDP — prefer Edge, then Chrome,
+  // detected per-platform (the old hard-coded list was Windows-only).
+  const { detectBrowserChannel } = await import(pathToFileURL(path.join(runtime, "lib", "util.mjs")).href)
+  const detected = detectBrowserChannel()
+  const browserPath = detected.edge ?? detected.chrome
+  if (!browserPath) {
+    console.log("SKIP  CDP test (no Chrome/Edge browser found)")
     return
   }
   const { server, port: httpPort } = await startServer(path.join(fixtures, "app.html"))
   const url = `http://127.0.0.1:${httpPort}/app.html`
 
   const cdpPort = 20000 + Math.floor(Math.random() * 20000)
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "gui-doctor-edge-"))
-  const child = spawn(edge, [`--headless=new`, `--remote-debugging-port=${cdpPort}`, `--user-data-dir=${userDataDir}`, "--no-first-run", "--no-default-browser-check", "about:blank"], {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "gui-doctor-browser-"))
+  const child = spawn(browserPath, [`--headless=new`, `--remote-debugging-port=${cdpPort}`, `--user-data-dir=${userDataDir}`, "--no-first-run", "--no-default-browser-check", "about:blank"], {
     stdio: "ignore",
   })
 

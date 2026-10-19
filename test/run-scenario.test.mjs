@@ -84,13 +84,17 @@ function runHarness(script, job) {
 async function main() {
   // The scenario suite drives real browsers; skip cleanly when playwright is
   // missing instead of failing every check with MODULE_NOT_FOUND noise.
+  const util = await import(pathToFileURL(path.join(runtime, "lib", "util.mjs")).href)
   try {
-    const { resolveModule } = await import(pathToFileURL(path.join(runtime, "lib", "util.mjs")).href)
-    resolveModule(["playwright", "playwright-core", "@playwright/test"], [projectDir])
+    util.resolveModule(["playwright", "playwright-core", "@playwright/test"], [projectDir])
   } catch {
     console.log("SKIP  scenario suite (playwright not installed — run `npm i` first)")
     return
   }
+  // Prefer a system browser channel (msedge/chrome); without one, fall back to
+  // playwright's bundled Chromium (install via `npx playwright-core install chromium`).
+  const suggestion = util.detectBrowserChannel().channelSuggestion
+  const launch = { headless: true, timeout: 15000, ...(suggestion ? { channel: suggestion } : {}) }
   const { server, port } = await startServer(path.join(fixtures, "app.html"))
   const url = `http://127.0.0.1:${port}/app.html`
   console.log(`fixture server: ${url}`)
@@ -102,7 +106,7 @@ async function main() {
       mode: "record",
       url,
       target: "web",
-      launch: { headless: true, channel: "msedge", timeout: 15000 },
+      launch,
       steps: [
         { action: "click", selector: "#load" },
         { action: "click", selector: "#boom" },
@@ -133,7 +137,7 @@ async function main() {
       mode: "fork",
       url,
       target: "web",
-      launch: { headless: true, channel: "msedge", timeout: 15000 },
+      launch,
       steps: [
         { action: "click", selector: "#load" },
         { action: "waitForTimeout", value: "300" },
@@ -163,7 +167,7 @@ async function main() {
       mode: "record",
       url,
       target: "web",
-      launch: { headless: true, channel: "msedge", timeout: 15000 },
+      launch,
       steps: [{ action: "click", selector: "#load" }],
       probes: [{ name: "x", expression: "() => 1" }],
       outputDir: path.join(outRoot, "denied"),
@@ -175,7 +179,7 @@ async function main() {
       mode: "record",
       url: "http://example.com/",
       target: "web",
-      launch: { headless: true, channel: "msedge", timeout: 15000 },
+      launch,
       steps: [],
       outputDir: path.join(outRoot, "nav"),
     })
@@ -186,7 +190,7 @@ async function main() {
       mode: "record",
       url,
       target: "web",
-      launch: { headless: true, channel: "msedge", timeout: 15000 },
+      launch,
       steps: [{ action: "click", selector: "#load" }],
       probes: [
         {
@@ -207,7 +211,7 @@ async function main() {
       mode: "record",
       url,
       target: "web",
-      launch: { headless: true, channel: "msedge", timeout: 15000 },
+      launch,
       steps: [{ action: "click", frame: ["#child"], selector: "#child-btn" }],
       probes: [{ name: "child", expression: "() => document.getElementById('child').contentWindow.__CHILD__" }],
       policy: { allowJsProbes: true, allowedPaths: [outRoot] },
@@ -220,7 +224,7 @@ async function main() {
       mode: "record",
       url,
       target: "web",
-      launch: { headless: true, channel: "msedge", timeout: 15000 },
+      launch,
       container: { label: "e2e-container" },
       steps: [{ action: "click", selector: "#load" }],
       probes: [{ name: "state", expression: "() => window.__STATE__" }],
@@ -237,7 +241,7 @@ async function main() {
       mode: "record",
       url,
       target: "web",
-      launch: { headless: true, channel: "msedge", timeout: 15000 },
+      launch,
       steps: [],
       probes: [{ name: "store", preset: "storage" }],
       policy: { allowJsProbes: true, allowedPaths: [outRoot] },
@@ -255,7 +259,7 @@ async function main() {
       mode: "record",
       url,
       target: "web",
-      launch: { headless: true, channel: "msedge", timeout: 15000 },
+      launch,
       steps: [dynStep],
       determinism: { record: true },
       policy: { allowJsProbes: true, allowedPaths: [outRoot] },
@@ -269,7 +273,7 @@ async function main() {
       mode: "fork",
       url,
       target: "web",
-      launch: { headless: true, channel: "msedge", timeout: 15000 },
+      launch,
       steps: [dynStep],
       forks: [{ id: "baseline" }],
       determinism: { harPath },
@@ -281,7 +285,7 @@ async function main() {
       mode: "fork",
       url,
       target: "web",
-      launch: { headless: true, channel: "msedge", timeout: 15000 },
+      launch,
       steps: [dynStep],
       forks: [{ id: "baseline" }],
       policy: { allowJsProbes: true, allowedPaths: [outRoot] },
@@ -296,7 +300,7 @@ async function main() {
         mode: "record",
         url,
         target: "web",
-        launch: { headless: true, channel: "msedge", timeout: 15000 },
+        launch,
         steps: [],
         probes: [{ name: "rand", expression: "() => window.__RANDOM__" }],
         determinism: { seed },
@@ -313,7 +317,7 @@ async function main() {
       mode: "record",
       url: `http://127.0.0.1:${port}/bp.html`,
       target: "web",
-      launch: { headless: true, channel: "msedge", timeout: 15000 },
+      launch,
       steps: [{ action: "click", selector: "#bp" }],
       breakpointProbes: [{ urlRegex: "bp\\.js", line: 3, expressions: ["n", "doubled"] }],
       policy: { allowJsProbes: true, allowedPaths: [outRoot] },
@@ -327,7 +331,7 @@ async function main() {
       mode: "record",
       url,
       target: "web",
-      launch: { headless: true, channel: "msedge", timeout: 15000 },
+      launch,
       steps: [{ action: "evaluate", value: 'async () => (await fetch("/api/data?fail=1")).status' }],
       capture: { body: true },
       policy: { allowJsProbes: true, allowedPaths: [outRoot] },
@@ -346,7 +350,7 @@ async function main() {
       mode: "bisect",
       url,
       target: "web",
-      launch: { headless: true, channel: "msedge", timeout: 15000 },
+      launch,
       steps: [{ action: "click", selector: "#load" }, { action: "click", selector: "#boom" }],
       afterEachProbe: { expression: "() => window.__STATE__.clicks" },
       until: "() => window.__STATE__.clicks > 0",

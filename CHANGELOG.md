@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- CI test workflow (`test.yml`): typecheck + full suite on ubuntu and windows.
+
+### Fixed
+
+- Steps' `testId` (camelCase, as exposed by the tool schema) is now honoured by
+  the runtime — previously only lowercase `testid` matched, so `testId`-only
+  steps failed with "requires selector".
+- `expectText` waits for the element to attach and polls until the step timeout
+  instead of failing on the first read when the element is missing.
+- A harness timeout force-closes the launched browsers instead of orphaning
+  them; aborting a run kills the whole harness process tree (Windows included).
+- Forks whose `patchAfterLoad` fails to apply are marked failed instead of
+  silently producing a misleading diff.
+- Navigation URLs written to `audit.log` are redacted, so tokens in query
+  strings never land there in clear text.
+- `gui_cdp_inspect` now asks for the `gui.navigate` permission for
+  out-of-allowlist `goto` targets instead of failing the run.
+- CDP failed requests report their URL (mapped from `requestWillBeSent`).
+- Plugin's node resolution no longer trips over `.cmd`/`.bat` shims on Windows.
+
+### Changed
+
+- The CDP perf trace starts before navigation, so first load is captured.
+- Response body capture skips non-textual and oversized payloads instead of
+  decoding binary bodies into mojibake.
+- Fork diffs report `consoleChanged` (content-level) alongside `consoleDelta`.
+- Job scanning (JS features / nav URLs) lives in `runtime/lib/jobscan.mjs`,
+  shared by the plugin gate, the CLI and the harness-side assert.
+- Tool argument schemas moved to `plugin/schema.ts`.
+- Tests pick the browser channel via `detectBrowserChannel` (no hard-coded
+  msedge) and skip cleanly when playwright is not installed.
+
 ## [0.1.5] - 2026-10-16
 
 ### Added

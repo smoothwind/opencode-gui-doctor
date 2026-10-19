@@ -73,14 +73,16 @@ const CASE_INSENSITIVE_FS = process.platform === "win32"
 
 export function isPathAllowed(target, roots) {
   if (!target) return true
-  const abs = path.resolve(target)
-  const norm = (p) => (CASE_INSENSITIVE_FS ? p.toLowerCase() : p)
-  const base = norm(abs)
+  const abs = normPath(path.resolve(target))
   return roots.some((root) => {
-    const r = norm(path.resolve(root))
-    return base === r || base.startsWith(r + path.sep)
+    const rel = path.relative(normPath(path.resolve(root)), abs)
+    // Empty rel = the target IS the root; a `..`-prefixed or absolute rel
+    // (different drive on Windows) means it escapes the root.
+    return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))
   })
 }
+
+const normPath = (p) => (CASE_INSENSITIVE_FS ? p.toLowerCase() : p)
 
 // --- redaction ---------------------------------------------------------------
 

@@ -1,0 +1,28 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      # ubuntu-latest images ship Edge (tests pick it via detectBrowserChannel);
+      # install bundled Chromium as a fallback channel anyway.
+      - name: Install bundled Chromium (Linux fallback)
+        if: runner.os == 'Linux'
+        run: npx playwright-core install --with-deps chromium
+      - run: npm test

@@ -77,11 +77,13 @@ function attachCollectors(page, bucket, capture = {}) {
       } catch {
         /* ignore */
       }
-      try {
-        const body = await res.body()
-        if (body) entry.responseBody = truncate(body.toString("utf8"), maxBody)
-      } catch {
-        /* ignore */
+      if (shouldCaptureResponseBody(res, maxBody)) {
+        try {
+          const body = await res.body()
+          if (body) entry.responseBody = truncate(body.toString("utf8"), maxBody)
+        } catch {
+          /* ignore */
+        }
       }
     }
     bucket.requests.push(entry)
@@ -90,6 +92,24 @@ function attachCollectors(page, bucket, capture = {}) {
 
 function newBucket() {
   return { console: [], pageErrors: [], requests: [] }
+}
+
+// Only download response bodies that look textual and are bounded by
+// content-length — avoids decoding binary payloads into mojibake and avoids
+// fully downloading huge responses just to truncate them right after.
+const TEXTUAL_MIME = /text\/|json|xml|html|javascript|graphql|urlencoded|csv|event-stream/i
+
+function shouldCaptureResponseBody(res, maxBody) {
+  try {
+    const h = res.headers()
+    const mime = h["content-type"] ?? ""
+    if (mime && !TEXTUAL_MIME.test(mime)) return false
+    const len = Number(h["content-length"] ?? 0)
+    if (len > maxBody * 4) return false
+    return true
+  } catch {
+    return true
+  }
 }
 
 // Attach the errors / failed requests observed during a step to the step
