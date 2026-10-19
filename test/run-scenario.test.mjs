@@ -248,7 +248,11 @@ async function main() {
       outputDir: path.join(outRoot, "preset"),
     })
     const store = preset.data?.probes?.[0]?.value
-    check("preset: storage read + secrets redacted", store?.localStorage?.token === "[REDACTED]" && store?.localStorage?.theme === "dark", JSON.stringify(store))
+    check(
+      "preset: storage read + secrets redacted",
+      store?.localStorage?.token === "[REDACTED]" && store?.localStorage?.theme === "dark" && store?.sessionStorage?.session === "[REDACTED]" && store?.sessionStorage?.theme === "light",
+      JSON.stringify(store)
+    )
 
     // --- P2: determinism (HAR), seed, breakpoints, bodies, a11y/visual, bisect ---
     const dynStep = { action: "evaluate", value: 'async () => { const r = await fetch("/api/dyn"); return (await r.json()).msg }' }

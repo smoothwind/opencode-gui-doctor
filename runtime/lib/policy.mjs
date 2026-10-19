@@ -135,7 +135,11 @@ export function redactValue(value, policy, key = "") {
   if (isPlainObject(value)) {
     const out = {}
     for (const [k, v] of Object.entries(value)) {
-      if (shouldRedactKey(k, policy)) out[k] = REDACTED
+      // Composite values under a sensitive key (e.g. the storage preset's
+      // `sessionStorage` tree) are recursed into rather than blacklisted, so
+      // their inner sensitive keys are still masked but the rest stays
+      // readable. Scalars are replaced outright.
+      if (shouldRedactKey(k, policy) && !isPlainObject(v) && !Array.isArray(v)) out[k] = REDACTED
       else out[k] = redactValue(v, policy, k)
     }
     return out
@@ -232,7 +236,10 @@ export function pruneArtifacts(artifactsDir, retention) {
     const audit = path.join(artifactsDir, "audit.log")
     if (Number.isFinite(maxAuditBytes) && maxAuditBytes > 0 && fs.existsSync(audit) && fs.statSync(audit).size > maxAuditBytes) {
       const text = fs.readFileSync(audit, "utf8")
-      const tail = text.slice(Math.floor(text.length / 2)).replace(/^[^\n]*\n/, "")
+      // Halve, but resume at a line boundary so a JSON entry is never split.
+      const mid = Math.floor(text.length / 2)
+      const nl = text.indexOf("\n", mid)
+      const tail = nl === -1 ? "" : text.slice(nl + 1)
       fs.writeFileSync(audit, tail, "utf8")
     }
   } catch {

@@ -646,6 +646,7 @@ export const GuiDoctorPlugin: Plugin = async ({ $, directory, worktree, client }
           if (data.pageErrors?.length) lines.push("", "Exceptions:", ...data.pageErrors.slice(0, 8).map((e: any) => `  - ${e.message}`))
           const errors = (data.console ?? []).filter((c: any) => c.level === "error")
           if (errors.length) lines.push("", "Console errors:", ...errors.slice(0, 8).map((c: any) => `  - ${c.text}`))
+          if (data.failedRequests?.length) lines.push("", "Failed requests:", ...data.failedRequests.slice(0, 8).map((r: any) => `  - ${r.status ?? "ERR"} ${r.url ?? r.requestId}${r.error ? ` (${r.error})` : ""}`))
 
           const attachments: any[] = []
           if (data.perfTraceFile && fs.existsSync(data.perfTraceFile)) attachments.push({ type: "file", mime: "application/json", url: fileUrl(data.perfTraceFile), filename: "perf-trace.json" })

@@ -16,6 +16,8 @@
       try {
         localStorage.setItem("token", "supersecret")
         localStorage.setItem("theme", "dark")
+        sessionStorage.setItem("session", "sid-supersecret")
+        sessionStorage.setItem("theme", "light")
       } catch (e) {}
 
       async function load() {

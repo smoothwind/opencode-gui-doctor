@@ -245,7 +245,7 @@ gui-doctor record --url http://localhost:1420 --channel msedge --steps steps.jso
       "probes": [{ "name": "state", "expression": "() =&gt; window.__STATE__" }] }
   ]
 }</code></pre>
-        <p>If only <code>api-500</code> reproduces the failure, the root cause is the error path around the API. If <code>disable-cache</code> changes behavior, investigate caching. <code>diff.diffs[].changedProbes</code> lists exactly what diverged.</p>
+        <p>If only <code>api-500</code> reproduces the failure, the root cause is the error path around the API. If <code>disable-cache</code> changes behavior, investigate caching. Each diff reports <code>changedProbes</code> (exactly what diverged), console changes, page-error / failed-step deltas, and a11y / visual pixel diffs versus the baseline.</p>
       </section>
 
       <section id="advanced">
@@ -272,7 +272,7 @@ gui-doctor record --url http://localhost:1420 --channel msedge --steps steps.jso
           <li><strong>Filesystem sandbox.</strong> <code>initScripts</code> paths, <code>storageState</code>, <code>outputDir</code> and Electron executables must live inside the project root (or <code>allowedPaths</code>).</li>
           <li><strong>Redaction.</strong> Console text, page errors, probe results and network URLs are scrubbed of secrets (Authorization/Cookie/JWT/Bearer/AWS/GitHub tokens + sensitive key names) before returning to the model.</li>
           <li><strong>Raw traces are not attached by default.</strong> The redacted <code>diagnostics.json</code> is attached instead.</li>
-          <li><strong>Audit log.</strong> Every run, navigation and JS grant is appended to <code>.gui-doctor/audit.log</code>.</li>
+          <li><strong>Audit log.</strong> Every run, navigation and JS grant is appended to <code>.gui-doctor/audit.log</code> (navigation URLs are redacted there too, so tokens in query strings never land in the log in clear text).</li>
         </ul>
         <pre><code>{
   "allowedOrigins": ["http://localhost:*", "https://staging.myapp.com"],

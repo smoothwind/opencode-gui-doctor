@@ -1,8 +1,9 @@
 import fs from "node:fs"
 import path from "node:path"
-import { ensureDir, readJson, writeJson, truncate, nowIso, withTimeout, emitProgress } from "./lib/util.mjs"
+import { ensureDir, readJson, writeJson, truncate, nowIso, withTimeout, emitProgress, normalizeExpression } from "./lib/util.mjs"
 import { connectCdp } from "./lib/cdp.mjs"
 import { mergePolicy, isUrlAllowed, isEndpointAllowed, redactValue, redactUrl, limitValue, createAuditor, pruneArtifacts } from "./lib/policy.mjs"
+import { resolveProbeExpression } from "./lib/presets.mjs"
 import { resolveContainer, cdpBannerExpression } from "./lib/container.mjs"
 
 const [jobFile, outFile] = process.argv.slice(2)
@@ -182,7 +183,9 @@ async function main() {
     for (const probe of job.probes ?? []) {
       const started = Date.now()
       try {
-        const value = await evaluate(client, probe.expression ?? probe.function)
+        // Same resolution as the scenario harness: expression or preset.
+        const code = normalizeExpression(resolveProbeExpression(probe) ?? probe.function)
+        const value = await evaluate(client, code)
         result.probes.push({ name: probe.name ?? `probe_${result.probes.length}`, ok: true, value, durationMs: Date.now() - started })
       } catch (err) {
         result.probes.push({ name: probe.name ?? `probe_${result.probes.length}`, ok: false, error: err.message, durationMs: Date.now() - started })
@@ -199,6 +202,12 @@ async function main() {
   }
 
   result.finishedAt = nowIso()
+  // Long observation windows can accumulate unbounded console/error/request
+  // entries — cap each bucket so memory and output stay bounded.
+  const cap = (arr, label) => (arr.length > 2000 ? [...arr.slice(0, 2000), { note: `…${arr.length - 2000} more ${label} omitted` }] : arr)
+  result.console = cap(result.console, "console entries")
+  result.pageErrors = cap(result.pageErrors, "page errors")
+  result.failedRequests = cap(result.failedRequests, "failed requests")
   result.summary = {
     consoleCount: result.console.length,
     consoleErrors: result.console.filter((c) => c.level === "error").length,

@@ -10,9 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - CI test workflow (`test.yml`): typecheck + full suite on ubuntu and windows.
+- `gui_cdp_inspect` output lists the failed requests it observed.
 
 ### Fixed
 
+- The storage preset's `sessionStorage` tree was redacted wholesale (the key
+  name matches the `session` pattern); composite values under sensitive keys
+  are now recursed into — inner secrets stay masked, the rest stays readable.
+- CDP probes accept `preset` readers: the tool schema allowed them but the CDP
+  harness ignored the field and failed with an opaque eval error.
+- A harness process killed hard (abort / OOM) now leaves an explicit
+  `ok:false, incomplete:true` result file instead of a half-written success.
+- An unhandled rejection now closes the launched browsers before exiting, so
+  they no longer survive as orphans.
 - Steps' `testId` (camelCase, as exposed by the tool schema) is now honoured by
   the runtime — previously only lowercase `testid` matched, so `testId`-only
   steps failed with "requires selector".
@@ -32,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - The CDP perf trace starts before navigation, so first load is captured.
+- CDP console / page-error / failed-request buckets are capped (2000 entries)
+  so long observation windows stay bounded.
+- `audit.log` halving resumes at a line boundary so JSON entries are never
+  split mid-record.
 - Response body capture skips non-textual and oversized payloads instead of
   decoding binary bodies into mojibake.
 - Fork diffs report `consoleChanged` (content-level) alongside `consoleDelta`.

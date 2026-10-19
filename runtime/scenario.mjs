@@ -914,8 +914,11 @@ async function main() {
   const audit = createAuditor(job.auditFile, policy)
   if (job.auditFile) pruneArtifacts(path.dirname(job.auditFile), policy.retention)
   const started = Date.now()
+  // Placeholder result first: if the process dies hard (kill -9 / OOM), the
+  // file must read as an explicit failure — never as a half-written success.
+  // It is overwritten by the final result below, or by fail() on error.
+  if (outFile) writeJson(outFile, { ok: false, incomplete: true, mode: job.mode ?? "record", target: job.target ?? "web", outputDir: job.outputDir, startedAt: nowIso() })
   const result = { ok: true, mode: job.mode ?? "record", target: job.target ?? "web", outputDir: job.outputDir, startedAt: nowIso() }
-  if (outFile) writeJson(outFile, result)
 
   emitProgress({ phase: "start", mode: result.mode, target: result.target, steps: (job.steps ?? []).length, forks: (job.forks ?? []).length })
   assertPolicy(job, policy)
@@ -962,4 +965,7 @@ main().catch((err) => {
   }
   fail(outFile, err)
 })
-process.on("unhandledRejection", (err) => fail(outFile, err))
+process.on("unhandledRejection", async (err) => {
+  await killLaunchedBrowsers()
+  fail(outFile, err)
+})

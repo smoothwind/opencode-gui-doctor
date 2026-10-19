@@ -72,6 +72,14 @@ check("policy: redactValue masks sensitive keys and token patterns", () => {
   assert.equal(out.note, "keep me")
 })
 
+check("policy: composite values under sensitive keys are recursed, not blacklisted", () => {
+  const out = policy.redactValue({ sessionStorage: { session: "sid-xyz", theme: "light" }, password: { plain: "no" }, list: [{ token: "t" }] }, P)
+  assert.equal(out.sessionStorage.session, policy.REDACTED)
+  assert.equal(out.sessionStorage.theme, "light")
+  assert.equal(out.password.plain, "no")
+  assert.equal(out.list[0].token, policy.REDACTED)
+})
+
 check("policy: redactUrl masks sensitive query params", () => {
   const out = policy.redactUrl("https://x.test/cb?code=abc123&state=xyz", P)
   assert.match(out, /code=(%5B|\[)REDACTED(%5D|\])/)
