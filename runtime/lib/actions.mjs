@@ -20,21 +20,6 @@ function resolveLocator(page, step, ctx = {}) {
   return root.locator(ref)
 }
 
-async function withTimeout(promise, ms, label) {
-  if (!ms) return promise
-  let timer
-  try {
-    return await Promise.race([
-      promise,
-      new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`timeout after ${ms}ms: ${label}`)), ms)
-      }),
-    ])
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
 export async function runStep(page, step, ctx = {}) {
   const action = step.action
   const timeout = step.timeout ?? ctx.defaultTimeout

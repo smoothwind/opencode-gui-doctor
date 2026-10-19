@@ -89,7 +89,7 @@ async function main() {
   if ((job.probes ?? []).length && !policy.allowJsProbes) {
     throw new Error("CDP probes inject JavaScript; enable allowJsProbes in policy to permit it")
   }
-  audit({ event: "run-start", tool: "cdp", endpoint, goto: job.goto, probes: (job.probes ?? []).length, allowJsProbes: policy.allowJsProbes })
+  audit({ event: "run-start", tool: "cdp", endpoint, goto: job.goto ? redactUrl(job.goto, policy) : undefined, probes: (job.probes ?? []).length, allowJsProbes: policy.allowJsProbes })
 
   emitProgress({ phase: "connect", target: "cdp", endpoint })
   log(`[gui-doctor] connecting CDP ${endpoint}`)

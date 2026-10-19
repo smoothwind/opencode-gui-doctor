@@ -2,7 +2,8 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { resolveModule, importModule, ensureDir, readJson, writeJson, truncate, nowIso, normalizeExpression, withTimeout, detectBrowserChannel, emitProgress } from "./lib/util.mjs"
-import { mergePolicy, isUrlAllowed, isEndpointAllowed, isPathAllowed, redactValue, limitValue, createAuditor, pruneArtifacts } from "./lib/policy.mjs"
+import { mergePolicy, isUrlAllowed, isEndpointAllowed, isPathAllowed, redactValue, redactUrl, limitValue, createAuditor, pruneArtifacts } from "./lib/policy.mjs"
+import { jsFeaturesRequested, collectNavUrls } from "./lib/jobscan.mjs"
 import { resolveProbeExpression } from "./lib/presets.mjs"
 import { seedInitScript, loadHar, makeHarHandler } from "./lib/determinism.mjs"
 import { installBreakpointProbes, disposeBreakpointProbes } from "./lib/probes-cdp.mjs"
@@ -144,32 +145,6 @@ class PolicyError extends Error {
   }
 }
 
-function collectNavUrls(job) {
-  const urls = []
-  if (job.url) urls.push(job.url)
-  const scan = (steps) => {
-    for (const s of steps ?? []) {
-      if (s?.action === "goto" || s?.action === "navigate") urls.push(s.value ?? s.url)
-      else if (s?.action === "waitForURL") urls.push(s.value ?? s.url)
-    }
-  }
-  scan(job.steps)
-  for (const fork of job.forks ?? []) scan(fork.steps)
-  return urls.filter(Boolean)
-}
-
-function jsFeaturesRequested(job) {
-  const stepsHaveEval = (steps) => (steps ?? []).some((s) => s?.action === "evaluate" || s?.action === "eval")
-  return (
-    (job.probes ?? []).length > 0 ||
-    (job.initScripts ?? []).length > 0 ||
-    (job.routeMocks ?? []).length > 0 ||
-    stepsHaveEval(job.steps) ||
-    !!((job.breakpointProbes ?? []).length || job.afterEachProbe || job.until) ||
-    (job.forks ?? []).some((f) => (f.probes ?? []).length || (f.initScripts ?? []).length || (f.patchAfterLoad ?? []).length || stepsHaveEval(f.steps))
-  )
-}
-
 function assertPolicy(job, policy) {
   const roots = [job.projectDir, ...(policy.allowedPaths ?? [])].filter(Boolean)
 
@@ -298,7 +273,9 @@ async function attachCdp(pw, job) {
       }
     }
   }
-  return { browser, context: context ?? (await browser.newContext()), ownsBrowser: true }
+  // ownsBrowser is decided by the caller (TARGETS.cdp): an attached browser
+  // belongs to the user unless cdp.closeOnExit opts in.
+  return { browser, context: context ?? (await browser.newContext()) }
 }
 
 // Choose the page to operate on, honouring `cdp.match` when several are open.
@@ -645,7 +622,11 @@ async function runOneFork(pw, job, fork, idx, total, outDir, harStats) {
       try {
         await (container?.kind === "iframe" ? evalInApp(page, container, normalizeExpression(patch.expression ?? patch.function)) : page.evaluate(normalizeExpression(patch.expression ?? patch.function)))
       } catch (err) {
+        // A failed patch means the hypothesis under test was never applied —
+        // letting the fork "pass" would produce a misleading diff.
         entry.patchError = err.message
+        entry.ok = false
+        entry.error = `patchAfterLoad failed: ${err.message}`
       }
     }
 
@@ -778,6 +759,14 @@ function booleanize(v) {
   return !!v
 }
 
+// Bounded content signature of a console bucket, for cross-fork comparison.
+function consoleSignature(events) {
+  return (events?.console ?? [])
+    .map((c) => `${c.level}:${c.text}`)
+    .join("\n")
+    .slice(0, 8192)
+}
+
 function diffForks(forkResults, outDir) {
   if (forkResults.length < 1) return null
   const baseline = forkResults.find((f) => f.id === "baseline") ?? forkResults[0]
@@ -811,6 +800,8 @@ function diffForks(forkResults, outDir) {
       forkId: fork.id,
       changedProbes: probeDiff,
       consoleDelta: (fork.events?.console?.length ?? 0) - (baseline.events?.console?.length ?? 0),
+      // Delta alone can be 0 when counts match but content differs.
+      consoleChanged: consoleSignature(baseline.events) !== consoleSignature(fork.events),
       pageErrorDelta: (fork.events?.pageErrors?.length ?? 0) - (baseline.events?.pageErrors?.length ?? 0),
       failedStepDelta: (fork.failedSteps ?? 0) - (baseline.failedSteps ?? 0),
       a11yDiff,
@@ -867,6 +858,18 @@ const TARGETS = {
   },
 }
 
+// Browsers/apps launched during this run. On a harness timeout the runner
+// coroutine is still awaiting, so its finally-block cleanup never runs —
+// force-close everything registered here instead, or the browsers survive
+// as orphans after the process exits.
+const LIVE = new Set()
+
+async function killLaunchedBrowsers() {
+  const entries = [...LIVE]
+  LIVE.clear()
+  await Promise.allSettled(entries.map((l) => (l.app ? l.app.close().catch(() => {}) : l.browser ? l.browser.close().catch(() => {}) : Promise.resolve())))
+}
+
 async function launchForTarget(pw, job) {
   const target = job.target ?? "web"
   let adapter = TARGETS[target]
@@ -878,6 +881,7 @@ async function launchForTarget(pw, job) {
   if (!adapter) throw new Error(`unknown target '${job.target}' (known: ${Object.keys(TARGETS).join(", ")})`)
   emitProgress({ phase: target === "cdp" ? "connect" : "launch", target, channel: job.launch?.channel, endpoint: job.cdp?.endpoint })
   const launched = await adapter(pw, job)
+  LIVE.add(launched)
   emitProgress({ phase: target === "cdp" ? "connected" : "launched", target })
   return launched
 }
@@ -896,7 +900,9 @@ async function main() {
   emitProgress({ phase: "start", mode: result.mode, target: result.target, steps: (job.steps ?? []).length, forks: (job.forks ?? []).length })
   assertPolicy(job, policy)
   const navUrls = collectNavUrls(job)
-  audit({ event: "run-start", tool: "scenario", mode: result.mode, target: result.target, navigations: navUrls, js: jsFeaturesRequested(job), allowJsProbes: policy.allowJsProbes })
+  // redactUrl (not just redactValue) so ?token=...&code=... query params never
+  // reach the audit log in clear text.
+  audit({ event: "run-start", tool: "scenario", mode: result.mode, target: result.target, navigations: navUrls.map((u) => redactUrl(u, policy)), js: jsFeaturesRequested(job), allowJsProbes: policy.allowJsProbes })
 
   emitProgress({ phase: "resolve-playwright", projectDir: job.projectDir ?? process.cwd() })
   log(`[gui-doctor] resolving playwright from ${job.projectDir ?? process.cwd()}`)
@@ -910,7 +916,12 @@ async function main() {
     else if (mode === "bisect") await runBisect(pw, job, result)
     else await runRecord(pw, job, result)
   }
-  await withTimeout(runner(), policy.timeouts?.harness, "harness")
+  try {
+    await withTimeout(runner(), policy.timeouts?.harness, "harness")
+  } catch (err) {
+    await killLaunchedBrowsers()
+    throw err
+  }
 
   result.durationMs = Date.now() - started
   result.finishedAt = nowIso()

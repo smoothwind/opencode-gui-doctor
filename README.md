@@ -138,7 +138,8 @@ iframe chain. Probes can read across same-origin frames in `expression`.
 
 If only `api-500` reproduces the failure, the root cause is the error path around
 the API. If `disable-cache` changes behavior, investigate caching.
-`diff.diffs[].changedProbes` lists exactly what diverged.
+Each diff reports `changedProbes` (exactly what diverged), console changes,
+page-error / failed-step deltas, and a11y / visual pixel diffs versus the baseline.
 
 ## Advanced diagnosis
 
@@ -148,6 +149,8 @@ the API. If `disable-cache` changes behavior, investigate caching.
   request/response `body` capture (bounded, key-aware redaction applies).
 - **Parallel forks** (`forkConcurrency`): run up to N fork variants concurrently,
   each with its own isolated browser and a fork-suffixed container label.
+- **Honest fork failures**: a fork whose `patchAfterLoad` fails to apply is
+  marked as failed instead of silently producing a misleading diff.
 - **CDP ownership** (`closeOnExit`): leave the attached browser running (default)
   or kill it via raw CDP on exit.
 - **Artifact retention** (`.gui-doctor.json` → `retention`): prunes old `runs/`
@@ -181,7 +184,8 @@ and the harness (runtime enforcement):
 - **Raw traces are not attached by default.** The redacted `diagnostics.json` is
   attached instead; `trace.zip` is still written and its path printed.
 - **Audit log.** Every run, navigation and JS grant is appended to
-  `.gui-doctor/audit.log`.
+  `.gui-doctor/audit.log` (navigation URLs are redacted there too, so tokens in
+  query strings never land in the log in clear text).
 
 Configure via `.gui-doctor.json`, plugin options, or env vars:
 

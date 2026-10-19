@@ -22,6 +22,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawnSync } from "node:child_process"
+import { jsFeaturesRequested } from "./lib/jobscan.mjs"
 
 const runtimeDir = path.dirname(fileURLToPath(import.meta.url))
 
@@ -203,20 +204,12 @@ function initScriptsFrom(flags) {
   return asList(flags.initScript).map((f) => path.resolve(String(f)))
 }
 
-function stepsHaveEval(steps) {
-  return steps.some((s) => s?.action === "evaluate" || s?.action === "eval")
-}
-
-function policyFrom(flags, { probes = [], initScripts = [], steps = [] } = {}) {
+// jobish is any subset of a job ({ probes, initScripts, steps, forks,
+// afterEachProbe, until, ... }) — jsFeaturesRequested treats missing fields as
+// absent, mirroring the harness-side check.
+function policyFrom(flags, jobish = {}) {
   const p = {}
-  const needsJs =
-    bool(flags.allowJs, false) ||
-    probes.length > 0 ||
-    initScripts.length > 0 ||
-    stepsHaveEval(steps) ||
-    flags.afterEachProbe !== undefined ||
-    flags.until !== undefined
-  if (needsJs) p.allowJsProbes = true
+  if (bool(flags.allowJs, false) || jsFeaturesRequested(jobish)) p.allowJsProbes = true
   if (flags.allowedOrigins) p.allowedOrigins = String(flags.allowedOrigins).split(",").map((s) => s.trim()).filter(Boolean)
   if (flags.cdpEndpoints) p.cdpAllowedEndpoints = String(flags.cdpEndpoints).split(",").map((s) => s.trim()).filter(Boolean)
   if (bool(flags.allowRawTrace, false)) p.redaction = { allowAttachRawTrace: true }
@@ -435,7 +428,7 @@ function main() {
       projectDir,
       pluginRoot: runtimeDir,
       auditFile,
-      policy: policyFrom(flags, { steps }),
+      policy: policyFrom(flags, { steps, afterEachProbe: flags.afterEachProbe, until: flags.until }),
     }
     const container = containerFrom(flags)
     if (container !== undefined) job.container = container
@@ -452,7 +445,7 @@ function main() {
     job.pluginRoot = job.pluginRoot ?? runtimeDir
     job.auditFile = job.auditFile ?? auditFile
     job.outputDir = job.outputDir ?? defaultOut(job.mode ?? "record")
-    job.policy = { ...(job.policy ?? {}), ...policyFrom(flags, { probes: job.probes ?? [], initScripts: job.initScripts ?? [], steps: job.steps ?? [] }) }
+    job.policy = { ...(job.policy ?? {}), ...policyFrom(flags, { ...job, afterEachProbe: flags.afterEachProbe ?? job.afterEachProbe, until: flags.until ?? job.until }) }
     const container = containerFrom(flags)
     if (container !== undefined) job.container = container
     const { data, outPath } = runJob("scenario.mjs", job, artifacts, job.mode ?? "record")

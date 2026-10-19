@@ -4,7 +4,7 @@ import fs from "node:fs"
 import http from "node:http"
 import os from "node:os"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const runtime = path.join(here, "..", "runtime")
@@ -82,6 +82,15 @@ function runHarness(script, job) {
 }
 
 async function main() {
+  // The scenario suite drives real browsers; skip cleanly when playwright is
+  // missing instead of failing every check with MODULE_NOT_FOUND noise.
+  try {
+    const { resolveModule } = await import(pathToFileURL(path.join(runtime, "lib", "util.mjs")).href)
+    resolveModule(["playwright", "playwright-core", "@playwright/test"], [projectDir])
+  } catch {
+    console.log("SKIP  scenario suite (playwright not installed — run `npm i` first)")
+    return
+  }
   const { server, port } = await startServer(path.join(fixtures, "app.html"))
   const url = `http://127.0.0.1:${port}/app.html`
   console.log(`fixture server: ${url}`)
@@ -297,7 +306,7 @@ async function main() {
     const s1 = await seedJob(42, "seed42a")
     const s2 = await seedJob(42, "seed42b")
     const s3 = await seedJob(7, "seed7")
-    check("determinism: same seed �?same Math.random", s1.data?.probes?.[0]?.value === s2.data?.probes?.[0]?.value && s1.data?.probes?.[0]?.value !== s3.data?.probes?.[0]?.value, `${s1.data?.probes?.[0]?.value} ${s2.data?.probes?.[0]?.value} ${s3.data?.probes?.[0]?.value}`)
+    check("determinism: same seed -> same Math.random", s1.data?.probes?.[0]?.value === s2.data?.probes?.[0]?.value && s1.data?.probes?.[0]?.value !== s3.data?.probes?.[0]?.value, `${s1.data?.probes?.[0]?.value} ${s2.data?.probes?.[0]?.value} ${s3.data?.probes?.[0]?.value}`)
 
     // CDP breakpoint probe
     const bp = await runHarness("scenario.mjs", {

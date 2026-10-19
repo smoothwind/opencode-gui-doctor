@@ -109,19 +109,50 @@ async function loadUrlMatcher(runtimeDir: string): Promise<UrlMatcher> {
 
 function resolveNode(): string {
   if (process.env.GUI_DOCTOR_NODE) return process.env.GUI_DOCTOR_NODE
-  const exts = process.platform === "win32" ? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT").split(";") : [""]
-  for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
-    if (!dir) continue
-    for (const ext of exts) {
-      const candidate = path.join(dir, `node${ext}`)
-      try {
-        if (fs.existsSync(candidate)) return candidate
-      } catch {
-        /* ignore */
-      }
-    }
+  // The plugin itself runs on a real runtime binary — reuse it so spawn() never
+  // has to resolve a .cmd/.bat shim from PATH (Windows spawn without `shell`
+  // refuses to execute those, per CVE-2024-27980). Under Bun, fall back to a
+  // bare `node` on PATH (bare names resolve to node.exe, not a shim).
+  return process.versions.bun ? "node" : process.execPath
+}
+
+type JobScan = {
+  jsFeaturesRequested: (job: any) => boolean
+  collectNavUrls: (job: any) => string[]
+}
+
+// Load the runtime's shared job scanner so the plugin's permission gating and
+// the harness's policy enforcement always agree (same pattern as
+// loadUrlMatcher). Falls back to a local copy only if the runtime is missing.
+async function loadJobScan(runtimeDir: string): Promise<JobScan> {
+  try {
+    const mod = await import(pathToFileURL(path.join(runtimeDir, "lib", "jobscan.mjs")).href)
+    if (typeof mod.jsFeaturesRequested === "function" && typeof mod.collectNavUrls === "function") return mod
+  } catch {
+    /* fall through to the inline copies */
   }
-  return "node"
+  const stepsHaveEval = (steps: any[]) => (steps ?? []).some((s) => s?.action === "evaluate" || s?.action === "eval")
+  const navActions = ["goto", "navigate", "waitForURL"]
+  return {
+    jsFeaturesRequested: (job: any) =>
+      (job?.probes ?? []).length > 0 ||
+      (job?.initScripts ?? []).length > 0 ||
+      (job?.routeMocks ?? []).length > 0 ||
+      stepsHaveEval(job?.steps) ||
+      (job?.breakpointProbes ?? []).length > 0 ||
+      !!(job?.afterEachProbe || job?.until) ||
+      (job?.forks ?? []).some((f: any) => (f.probes ?? []).length || (f.initScripts ?? []).length || (f.patchAfterLoad ?? []).length || stepsHaveEval(f.steps)),
+    collectNavUrls: (job: any) => {
+      const urls: string[] = []
+      if (job?.url) urls.push(job.url)
+      const scan = (steps: any[]) => {
+        for (const s of steps ?? []) if (navActions.includes(s?.action)) urls.push(s.value ?? s.url)
+      }
+      scan(job?.steps)
+      for (const f of job?.forks ?? []) scan(f.steps)
+      return urls.filter(Boolean)
+    },
+  }
 }
 
 function readJsonSafe(file: string): any {
@@ -251,6 +282,7 @@ export const GuiDoctorPlugin: Plugin = async ({ $, directory, worktree, client }
 
   const nodeBin = resolveNode()
   const matchUrlPattern = await loadUrlMatcher(runtimeDir)
+  const jobScan = await loadJobScan(runtimeDir)
   const allowedBy = (origins: string[] | undefined, url: string, fallback: string[]) => (origins?.length ? origins : fallback).some((p) => matchUrlPattern(p, url))
 
   async function toast(variant: "info" | "success" | "warning" | "error", message: string, title = "gui-doctor") {
@@ -352,7 +384,13 @@ export const GuiDoctorPlugin: Plugin = async ({ $, directory, worktree, client }
       }
       const onAbort = () => {
         try {
-          child.kill()
+          if (process.platform === "win32" && child.pid) {
+            // child.kill() only terminates the node harness — the Chromium it
+            // launched survives as an orphan. /T takes down the whole tree.
+            spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" })
+          } else {
+            child.kill()
+          }
         } catch {
           /* ignore */
         }
@@ -383,33 +421,9 @@ export const GuiDoctorPlugin: Plugin = async ({ $, directory, worktree, client }
     return { data: JSON.parse(fs.readFileSync(outPath, "utf8")), stderr: res.stderr.toString(), exitCode: res.exitCode, outPath }
   }
 
-  function jsRequested(job: any): boolean {
-    const stepsHaveEval = (steps: any[]) => (steps ?? []).some((s) => s?.action === "evaluate" || s?.action === "eval")
-    return (
-      (job.probes ?? []).length > 0 ||
-      (job.initScripts ?? []).length > 0 ||
-      (job.routeMocks ?? []).length > 0 ||
-      stepsHaveEval(job.steps) ||
-      (job.breakpointProbes ?? []).length > 0 ||
-      !!(job.afterEachProbe || job.until) ||
-      (job.forks ?? []).some((f: any) => (f.probes ?? []).length || (f.initScripts ?? []).length || (f.patchAfterLoad ?? []).length || stepsHaveEval(f.steps))
-    )
-  }
-
-  function navUrls(job: any): string[] {
-    const urls: string[] = []
-    if (job.url) urls.push(job.url)
-    const scan = (steps: any[]) => {
-      for (const s of steps ?? []) if (["goto", "navigate", "waitForURL"].includes(s?.action)) urls.push(s.value ?? s.url)
-    }
-    scan(job.steps)
-    for (const f of job.forks ?? []) scan(f.steps)
-    return urls.filter(Boolean)
-  }
-
   async function gate(context: any, overrides: any, job: any, { endpoint }: { endpoint?: string } = {}): Promise<string[]> {
     const granted: string[] = []
-    if (jsRequested(job) && overrides.allowJsProbes !== true) {
+    if (jobScan.jsFeaturesRequested(job) && overrides.allowJsProbes !== true) {
       await context.ask({
         permission: "gui.evaluate",
         patterns: ["<page JavaScript: probes / initScripts / routeMocks / evaluate>"],
@@ -419,7 +433,7 @@ export const GuiDoctorPlugin: Plugin = async ({ $, directory, worktree, client }
       overrides.allowJsProbes = true
       granted.push("page JavaScript")
     }
-    const outside = navUrls(job).filter((u) => !allowedBy(overrides.allowedOrigins, u, DEFAULT_ORIGINS))
+    const outside = jobScan.collectNavUrls(job).filter((u) => !allowedBy(overrides.allowedOrigins, u, DEFAULT_ORIGINS))
     if (outside.length) {
       await context.ask({ permission: "gui.navigate", patterns: outside, always: outside, metadata: { reason: "Navigation targets outside the default localhost allowlist." } })
       overrides.allowedOrigins = [...(overrides.allowedOrigins ?? DEFAULT_ORIGINS), ...outside]
@@ -627,7 +641,7 @@ export const GuiDoctorPlugin: Plugin = async ({ $, directory, worktree, client }
           if (data.diff?.diffs?.length) {
             lines.push("", "## Diff vs baseline")
             for (const d of data.diff.diffs) {
-              lines.push(`- ${d.forkId}: failedStepΔ=${d.failedStepDelta} pageErrorΔ=${d.pageErrorDelta} consoleΔ=${d.consoleDelta}`)
+              lines.push(`- ${d.forkId}: failedStepΔ=${d.failedStepDelta} pageErrorΔ=${d.pageErrorDelta} consoleΔ=${d.consoleDelta}${d.consoleChanged ? " (console content differs)" : ""}`)
               for (const c of d.changedProbes) lines.push(`    ~ ${c.name}: baseline=${JSON.stringify(c.baseline)} candidate=${JSON.stringify(c.candidate)}`)
               if (d.a11yDiff) lines.push(`    a11y: ${d.a11yDiff.changed} changed lines @ ${d.a11yDiff.atLine}`)
               if (d.visualDiff && !d.visualDiff.error) lines.push(`    visual: ${(d.visualDiff.ratio * 100).toFixed(2)}% pixels differ`)
@@ -707,7 +721,9 @@ export const GuiDoctorPlugin: Plugin = async ({ $, directory, worktree, client }
           const outDir = args.outputDir ? path.resolve(projectRoot, args.outputDir) : runDir("cdp")
           const job = { cdp: { endpoint, match: args.match, closeOnExit: args.closeOnExit === true }, goto: args.goto, duration: args.duration ?? 1500, probes: args.probes ?? [], perf: args.perf ?? {}, container: normalizeContainer(args.container), outputDir: outDir }
           context.metadata?.({ title: "gui_cdp_inspect · connecting…", metadata: { live: true, phase: "start" } })
-          const grants = await gate(context, overrides, { probes: job.probes }, { endpoint })
+          // Include goto as a navigation target so out-of-allowlist URLs get a
+          // permission prompt instead of a hard harness-side rejection.
+          const grants = await gate(context, overrides, { probes: job.probes, url: args.goto }, { endpoint })
           if (grants.length) await toast("info", `approved for this run: ${grants.join("; ")}`)
           fs.mkdirSync(outDir, { recursive: true })
           let data: any
